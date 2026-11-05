@@ -120,3 +120,15 @@ def test_a_failing_step_stops_the_workflow(nodes, failing):
     assert calls[-1] == failing
     assert result["status"] == "stopped_due_to_error"
     assert result["cleaned_text"] == "Article text."
+
+
+@pytest.mark.parametrize("failing", ["sentiment", "fact_check", "generate", "judge", "store"])
+def test_the_failing_step_and_its_message_are_logged_but_not_returned(nodes, failing, caplog):
+    config, _ = nodes
+    config["fail_at"] = failing
+
+    result = run()
+
+    assert f"Error detected from '{failing}': {failing} failed" in caplog.text
+    assert "error_from" not in result
+    assert "message" not in result

@@ -15,7 +15,9 @@ Workflow:
 
 Core Features:
     - Uses a TypedDict (`MyState`) to define the shape of the pipeline's
-      state, ensuring structured data flow between nodes.
+      state, ensuring structured data flow between nodes. `WorkflowState`
+      adds the error details a failing node passes to the error handler,
+      which are not part of the returned result.
     - Employs conditional edges to handle branching:
         * Routes to error handler if a node signals `"status": "error"`.
         * Retries perspective generation up to PERSPECTIVE_MAX_RETRIES
@@ -56,8 +58,16 @@ class MyState(TypedDict):
     status: str
 
 
+class WorkflowState(MyState):
+    # Set by a failing node and logged by error_handler. LangGraph drops
+    # keys that are not in the state schema, so without these the log only
+    # says "Unknown source". The output schema keeps them out of the result.
+    error_from: str
+    message: str
+
+
 def build_langgraph():
-    graph = StateGraph(MyState)
+    graph = StateGraph(WorkflowState, output=MyState)
 
     graph.add_node("sentiment_analysis", sentiment.run_sentiment_sdk)
     graph.add_node("fact_checking", fact_check.run_fact_check)

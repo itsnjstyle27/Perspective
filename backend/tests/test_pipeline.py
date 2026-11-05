@@ -161,8 +161,8 @@ def test_workflow_stops_at_the_first_failing_step(services, fake_chat_client, mo
 
     result = pipeline.run_langgraph_workflow({"cleaned_text": ARTICLE})
 
-    # Only "status" is checked: the node's error_from/message (and the handler's from/error) are
-    # not keys of MyState, so LangGraph currently drops them from the result.
+    # Only "status" is checked: the node's error_from/message are logged but not returned, and
+    # the handler's from/error are not keys of the workflow state, so LangGraph drops them.
     assert result["status"] == "stopped_due_to_error"
     assert result["cleaned_text"] == ARTICLE
     assert services["clients"]["facts"].requests == []
