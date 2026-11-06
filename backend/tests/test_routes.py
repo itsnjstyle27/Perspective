@@ -1,5 +1,7 @@
 """Tests for the HTTP API in main.py / app/routes/routes.py, with the scraper, pipeline and LLM calls faked."""
 
+import asyncio
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -58,6 +60,14 @@ def backend(monkeypatch, resolve_hosts):
     return calls
 
 
+def runs_on_the_event_loop():
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return False
+    return True
+
+
 def test_health_check(client):
     response = client.get("/api/")
 
@@ -82,6 +92,27 @@ def test_process_runs_the_workflow_on_the_scraped_article(client, backend):
     assert body["perspective"] == {"reasoning": "Why.", "perspective": "What else."}
     assert body["status"] == "success"
     assert backend["workflow"] == (SCRAPED,)
+
+
+def test_chat_does_not_block_the_event_loop(client, monkeypatch):
+    on_event_loop = {}
+
+    def search(query):
+        on_event_loop["search"] = runs_on_the_event_loop()
+        return []
+
+    def answer(query, results):
+        on_event_loop["llm"] = runs_on_the_event_loop()
+        return "An answer."
+
+    monkeypatch.setattr(routes, "search_pinecone", search)
+    monkeypatch.setattr(routes, "ask_llm", answer)
+
+    response = client.post("/api/chat", json={"message": "Why?"})
+
+    assert response.status_code == HTTP_OK
+    assert response.json() == {"answer": "An answer."}
+    assert on_event_loop == {"search": False, "llm": False}
 
 
 def test_chat_answers_from_the_retrieved_context(client, backend):
