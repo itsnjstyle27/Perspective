@@ -218,3 +218,62 @@ def test_verifier_marks_unparseable_replies_as_unverified(monkeypatch, fake_chat
             "source_link": "https://news.example/b",
         }
     ]
+
+
+def test_verifier_keeps_the_other_verdicts_when_one_call_fails(monkeypatch, fake_chat_client):
+    reply = '{"verdict": "%s", "explanation": "From the evidence.", "original_claim": "%s", "source_link": "%s"}'
+    client = fake_chat_client(
+        reply % ("True", "First claim", "https://news.example/a"),
+        TimeoutError("request timed out"),
+        reply % ("False", "Third claim", "https://news.example/c"),
+    )
+    monkeypatch.setattr(llm_processing, "client", client)
+
+    result = llm_processing.run_fact_verifier_sdk(
+        [
+            {"claim": "First claim", "link": "https://news.example/a"},
+            {"claim": "Second claim", "link": "https://news.example/b"},
+            {"claim": "Third claim", "link": "https://news.example/c"},
+        ]
+    )
+
+    assert result["status"] == "success"
+    assert len(client.requests) == 3
+    assert result["verifications"] == [
+        {
+            "verdict": "True",
+            "explanation": "From the evidence.",
+            "original_claim": "First claim",
+            "source_link": "https://news.example/a",
+        },
+        {
+            "verdict": "Unverified",
+            "explanation": "The claim could not be checked.",
+            "original_claim": "Second claim",
+            "source_link": "https://news.example/b",
+        },
+        {
+            "verdict": "False",
+            "explanation": "From the evidence.",
+            "original_claim": "Third claim",
+            "source_link": "https://news.example/c",
+        },
+    ]
+
+
+def test_verifier_reports_an_error_when_every_call_fails(monkeypatch, fake_chat_client):
+    client = fake_chat_client(TimeoutError("request timed out"), TimeoutError("request timed out"))
+    monkeypatch.setattr(llm_processing, "client", client)
+
+    result = llm_processing.run_fact_verifier_sdk(
+        [
+            {"claim": "First claim", "link": "https://news.example/a"},
+            {"claim": "Second claim", "link": "https://news.example/b"},
+        ]
+    )
+
+    assert result == {
+        "status": "error",
+        "error_from": "fact_verification",
+        "message": "request timed out",
+    }

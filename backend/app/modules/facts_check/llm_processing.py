@@ -98,6 +98,8 @@ def run_claim_extractor_sdk(state):
 def run_fact_verifier_sdk(search_results):
     try:
         results_list = []
+        failed_calls = 0
+        last_error = None
 
         for result in search_results:
             source = result.get("link", "N/A")
@@ -108,40 +110,55 @@ def run_fact_verifier_sdk(search_results):
                 f"\nLink: {source}"
             )
 
-            chat_completion = client.chat.completions.create(
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are a fact-checking assistant. "
-                            "Your job is to determine whether the given"
-                            " claim is True, False"
-                            "based on the provided web search evidence."
-                            " Keep it concise and structured."
-                        ),
-                    },
-                    {
-                        "role": "user",
-                        "content": (
-                            f"Claim: {claim}\n\n"
-                            f"Web Evidence:\n{evidence}\n\n"
-                            "Based on this evidence, is the claim true?\n"
-                            "Respond only in this JSON format:\n\n"
-                            "{\n"
-                            '  "verdict": "True" | "False",\n'
-                            '  "explanation": "...",\n'
-                            f'  "original_claim": "{claim}",\n'
-                            f'  "source_link": "{source}"\n'
-                            "}"
-                        ),
-                    },
-                ],
-                model=FACT_VERIFIER_MODEL,
-                temperature=FACT_VERIFIER_TEMPERATURE,
-                max_tokens=FACT_VERIFIER_MAX_TOKENS,
-            )
+            try:
+                chat_completion = client.chat.completions.create(
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are a fact-checking assistant. "
+                                "Your job is to determine whether the given"
+                                " claim is True, False"
+                                "based on the provided web search evidence."
+                                " Keep it concise and structured."
+                            ),
+                        },
+                        {
+                            "role": "user",
+                            "content": (
+                                f"Claim: {claim}\n\n"
+                                f"Web Evidence:\n{evidence}\n\n"
+                                "Based on this evidence, is the claim true?\n"
+                                "Respond only in this JSON format:\n\n"
+                                "{\n"
+                                '  "verdict": "True" | "False",\n'
+                                '  "explanation": "...",\n'
+                                f'  "original_claim": "{claim}",\n'
+                                f'  "source_link": "{source}"\n'
+                                "}"
+                            ),
+                        },
+                    ],
+                    model=FACT_VERIFIER_MODEL,
+                    temperature=FACT_VERIFIER_TEMPERATURE,
+                    max_tokens=FACT_VERIFIER_MAX_TOKENS,
+                )
 
-            content = chat_completion.choices[0].message.content.strip()
+                content = chat_completion.choices[0].message.content.strip()
+            except Exception as e:
+                # One failed call should not cost the verdicts of the other claims
+                logger.exception(f"Could not verify claim: {claim[:80]}")
+                last_error = e
+                failed_calls += 1
+                results_list.append(
+                    {
+                        "verdict": "Unverified",
+                        "explanation": "The claim could not be checked.",
+                        "original_claim": claim,
+                        "source_link": source,
+                    }
+                )
+                continue
 
             # Strip markdown code blocks if present
             content = re.sub(r"^```json\s*|```$", "", content, flags=re.MULTILINE).strip()
@@ -173,6 +190,10 @@ def run_fact_verifier_sdk(search_results):
                 }
 
             results_list.append(parsed)
+
+        # Every call failing means the verifier itself is down, not just one claim
+        if last_error and failed_calls == len(search_results):
+            raise last_error
 
         return {
             "claim": claim,
