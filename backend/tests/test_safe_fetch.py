@@ -114,6 +114,16 @@ def test_rejects_unresolvable_hosts(resolve_hosts):
         validate_public_url("https://does-not-exist.example/")
 
 
+@pytest.mark.parametrize("url", ["http://[abc", "https://[::1", "http://example.com]/"])
+def test_rejects_malformed_urls(resolve_hosts, url):
+    lookups = resolve_hosts({"example.com": [PUBLIC_IP]})
+
+    with pytest.raises(UnsafeURLError, match="malformed"):
+        validate_public_url(url)
+
+    assert lookups == []
+
+
 def test_rejects_out_of_range_ports(resolve_hosts):
     lookups = resolve_hosts({"example.com": [PUBLIC_IP]})
 
@@ -245,6 +255,14 @@ def test_blocks_a_redirect_to_a_private_address(resolve_hosts, fake_get):
         fetch_public_html("https://example.com/start")
 
     assert [c["url"] for c in calls] == [f"https://{PUBLIC_IP}/start"]
+
+
+def test_rejects_a_redirect_to_a_malformed_url(resolve_hosts, fake_get):
+    resolve_hosts({"example.com": [PUBLIC_IP]})
+    fake_get(FakeResponse(status=HTTP_FOUND, headers={"Location": "http://[abc"}))
+
+    with pytest.raises(UnsafeURLError, match="malformed"):
+        fetch_public_html("https://example.com/")
 
 
 def test_rejects_a_redirect_without_a_location_header(resolve_hosts, fake_get):

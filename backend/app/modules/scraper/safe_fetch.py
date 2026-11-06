@@ -44,7 +44,10 @@ class UnsafeURLError(ValueError):
 
 
 def validate_public_url(url: str) -> str:
-    parts = urlsplit(url)
+    try:
+        parts = urlsplit(url)
+    except ValueError as e:
+        raise UnsafeURLError("The URL is malformed.") from e
     if parts.scheme.lower() not in ALLOWED_SCHEMES or not parts.hostname:
         raise UnsafeURLError("Only http and https URLs are allowed.")
     try:
@@ -113,7 +116,10 @@ def fetch_public_html(url: str, headers: dict | None = None) -> str:
                     location = res.headers.get("Location")
                     if not location:
                         raise requests.RequestException("Redirect without a Location header.")
-                    current = urljoin(current, location)
+                    try:
+                        current = urljoin(current, location)
+                    except ValueError as e:
+                        raise UnsafeURLError("The redirect points to a malformed URL.") from e
                     continue
                 res.raise_for_status()
                 body = b""

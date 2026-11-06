@@ -94,6 +94,15 @@ def test_chat_answers_from_the_retrieved_context(client, backend):
 
 
 @pytest.mark.parametrize("path", ["/api/bias", "/api/process"])
+def test_url_endpoints_reject_malformed_urls(client, backend, path):
+    response = client.post(path, json={"url": "http://[abc"})
+
+    assert response.status_code == HTTP_BAD_REQUEST
+    assert "malformed" in response.json()["detail"]
+    assert "scrape" not in backend
+
+
+@pytest.mark.parametrize("path", ["/api/bias", "/api/process"])
 @pytest.mark.parametrize("body", [{}, {"url": None}, {"url": 123}, {"link": ARTICLE_URL}])
 def test_url_endpoints_reject_malformed_bodies(client, backend, path, body):
     response = client.post(path, json=body)
