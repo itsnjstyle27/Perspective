@@ -372,6 +372,20 @@ def test_decodes_with_the_declared_charset(resolve_hosts, fake_get):
     assert fetch_public_html("https://example.com/") == "café"
 
 
+@pytest.mark.parametrize("charset", ["utf8mb4", "none", "x-user-defined-1"])
+def test_ignores_a_declared_charset_python_does_not_know(resolve_hosts, fake_get, charset):
+    resolve_hosts({"example.com": [PUBLIC_IP]})
+    fake_get(
+        FakeResponse(
+            body="café".encode("utf-8"),
+            headers={"Content-Type": f"text/html; charset={charset}"},
+            encoding=charset,
+        )
+    )
+
+    assert fetch_public_html("https://example.com/") == "café"
+
+
 def test_decodes_utf8_when_no_charset_is_declared(resolve_hosts, fake_get):
     # requests would guess ISO-8859-1 for text/html without a charset and garble UTF-8.
     resolve_hosts({"example.com": [PUBLIC_IP]})
