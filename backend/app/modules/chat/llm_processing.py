@@ -37,10 +37,13 @@ client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 
 def build_context(docs):
-    return "\n".join(
-        f"{m['metadata'].get('explanation') or m['metadata'].get('reasoning', '')}"
-        for m in docs
-    )
+    lines = []
+    for doc in docs:
+        metadata = doc["metadata"]
+        details = metadata.get("explanation") or metadata.get("reasoning", "")
+        # Vectors stored before the text was added to the metadata don't have it
+        lines.append(" ".join(part for part in (metadata.get("text"), details) if part))
+    return "\n".join(lines)
 
 
 def ask_llm(question, docs):

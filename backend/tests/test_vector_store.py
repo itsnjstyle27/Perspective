@@ -148,7 +148,7 @@ def test_embed_chunks_pairs_each_vector_with_its_chunk():
     vectors = embed_chunks(chunks)
 
     assert [v["id"] for v in vectors] == [c["id"] for c in chunks]
-    assert [v["metadata"] for v in vectors] == [c["metadata"] for c in chunks]
+    assert [v["metadata"] for v in vectors] == [{**c["metadata"], "text": c["text"]} for c in chunks]
     # The fake embedder encodes the text length in the first value.
     assert [v["values"][0] for v in vectors] == [float(len(c["text"])) for c in chunks]
 

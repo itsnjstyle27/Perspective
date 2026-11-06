@@ -197,6 +197,17 @@ def test_build_context_prefers_explanations_and_falls_back_to_reasoning():
     assert chat_llm.build_context(docs) == "Fact explanation.\nPerspective reasoning.\n"
 
 
+def test_build_context_includes_the_stored_text():
+    docs = [
+        {"metadata": {"type": "fact", "text": "The bridge cost 40 million.", "explanation": "It cost 60 million."}},
+        {"metadata": {"type": "counter-perspective", "text": "The budget is too low.", "reasoning": "Costs rise."}},
+    ]
+
+    assert chat_llm.build_context(docs) == (
+        "The bridge cost 40 million. It cost 60 million.\nThe budget is too low. Costs rise."
+    )
+
+
 def test_ask_llm_sends_the_question_with_the_retrieved_context(monkeypatch, fake_chat_client):
     client = fake_chat_client("The budget is 9M.")
     monkeypatch.setattr(chat_llm, "client", client)

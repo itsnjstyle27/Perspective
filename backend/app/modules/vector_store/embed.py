@@ -46,6 +46,11 @@ def embed_chunks(chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     vectors = []
     for chunk, embedding in zip(chunks, embeddings):
         vectors.append(
-            {"id": chunk["id"], "values": embedding, "metadata": chunk["metadata"]}
+            {
+                "id": chunk["id"],
+                "values": embedding,
+                # Pinecone only gives back the metadata, so the chat can't read the text otherwise
+                "metadata": {**chunk["metadata"], "text": chunk["text"]},
+            }
         )
     return vectors
