@@ -38,7 +38,7 @@ def _search_single_claim(claim: str):
 def run_fact_check_pipeline(state):
     result = run_claim_extractor_sdk(state)
 
-    if state.get("status") != "success":
+    if result.get("status") != "success":
         logger.error("[ERROR] Claim extraction failed.")
         return [], "Claim extraction failed."
 
@@ -87,4 +87,9 @@ def run_fact_check_pipeline(state):
 
     # Step 3: Verify facts using LLM
     final = run_fact_verifier_sdk(search_results)
+
+    if final.get("status") != "success":
+        logger.error("[ERROR] Fact verification failed.")
+        return [], "Fact verification failed."
+
     return final.get("verifications", []), None

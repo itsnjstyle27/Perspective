@@ -144,6 +144,46 @@ def test_does_not_verify_without_any_search_evidence(pipeline):
     assert seen["verified"] is None
 
 
+def test_reports_an_error_when_claim_extraction_fails(pipeline, monkeypatch):
+    _, seen = pipeline
+    monkeypatch.setattr(
+        fact_check_utils,
+        "run_claim_extractor_sdk",
+        lambda state: {"status": "error", "error_from": "claim_extraction", "message": "rate limited"},
+    )
+
+    verifications, error = run_fact_check_pipeline(state())
+
+    assert verifications == []
+    assert error == "Claim extraction failed."
+    assert seen["searched"] == []
+
+
+def test_reports_an_error_when_fact_verification_fails(pipeline, monkeypatch):
+    config, _ = pipeline
+    config["claims_output"] = "1. The bridge cost 40 million dollars."
+    monkeypatch.setattr(
+        fact_check_utils,
+        "run_fact_verifier_sdk",
+        lambda search_results: {"status": "error", "error_from": "fact_verification", "message": "rate limited"},
+    )
+
+    verifications, error = run_fact_check_pipeline(state())
+
+    assert verifications == []
+    assert error == "Fact verification failed."
+
+
+def test_does_not_depend_on_the_status_already_in_the_state(pipeline):
+    config, _ = pipeline
+    config["claims_output"] = "1. The bridge cost 40 million dollars."
+
+    verifications, error = run_fact_check_pipeline({"cleaned_text": ARTICLE})
+
+    assert error is None
+    assert [v["original_claim"] for v in verifications] == ["The bridge cost 40 million dollars."]
+
+
 # --- LangGraph node wrapper ---------------------------------------------------------
 
 
@@ -169,6 +209,22 @@ def test_node_reports_pipeline_errors(pipeline):
         "status": "error",
         "error_from": "fact_checking",
         "message": "No search results available for fact verification.",
+    }
+
+
+def test_node_reports_a_failed_claim_extraction(pipeline, monkeypatch):
+    monkeypatch.setattr(
+        fact_check_utils,
+        "run_claim_extractor_sdk",
+        lambda state: {"status": "error", "error_from": "claim_extraction", "message": "rate limited"},
+    )
+
+    result = run_fact_check(state())
+
+    assert result == {
+        "status": "error",
+        "error_from": "fact_checking",
+        "message": "Claim extraction failed.",
     }
 
 
