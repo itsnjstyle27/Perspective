@@ -205,6 +205,41 @@ def test_verifier_parses_json_wrapped_in_a_code_fence(monkeypatch, fake_chat_cli
     assert "Cost 40 million" in client.requests[0]["messages"][1]["content"]
 
 
+@pytest.mark.parametrize(
+    "reply",
+    [
+        '{"verdict": "True"}',
+        '{"verdict": "True", "explanation": null, "original_claim": null, "source_link": null}',
+        '{"verdict": "True", "explanation": "", "original_claim": 12, "source_link": []}',
+    ],
+)
+def test_verifier_fills_in_fields_the_model_left_out(monkeypatch, fake_chat_client, reply):
+    monkeypatch.setattr(llm_processing, "client", fake_chat_client(reply))
+
+    result = llm_processing.run_fact_verifier_sdk([{"claim": "Some claim", "link": "https://news.example/a"}])
+
+    assert result["verifications"] == [
+        {
+            "verdict": "True",
+            "explanation": "The verifier gave no explanation.",
+            "original_claim": "Some claim",
+            "source_link": "https://news.example/a",
+        }
+    ]
+
+
+@pytest.mark.parametrize("reply", ['["True"]', '"True"', "12", '{"verdict": true}', '{"verdict": null}'])
+def test_verifier_marks_replies_without_a_verdict_as_unverified(monkeypatch, fake_chat_client, reply):
+    monkeypatch.setattr(llm_processing, "client", fake_chat_client(reply))
+
+    result = llm_processing.run_fact_verifier_sdk([{"claim": "Some claim", "link": "https://news.example/a"}])
+
+    [verification] = result["verifications"]
+    assert verification["verdict"] == "Unverified"
+    assert verification["original_claim"] == "Some claim"
+    assert verification["source_link"] == "https://news.example/a"
+
+
 def test_verifier_marks_unparseable_replies_as_unverified(monkeypatch, fake_chat_client):
     monkeypatch.setattr(llm_processing, "client", fake_chat_client("I think it is probably true."))
 

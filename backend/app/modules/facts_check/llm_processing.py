@@ -45,6 +45,25 @@ load_dotenv()
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 
+def _text_or(value, default):
+    return value.strip() if isinstance(value, str) and value.strip() else default
+
+
+def _complete_verification(reply, claim, source):
+    """
+    The model doesn't always follow the format it was given, but later steps need every field.
+    A fact with a missing field stops it from being stored, and Pinecone refuses a null.
+    """
+    if not isinstance(reply, dict):
+        reply = {}
+    return {
+        "verdict": _text_or(reply.get("verdict"), "Unverified"),
+        "explanation": _text_or(reply.get("explanation"), "The verifier gave no explanation."),
+        "original_claim": _text_or(reply.get("original_claim"), claim),
+        "source_link": _text_or(reply.get("source_link"), source),
+    }
+
+
 def run_claim_extractor_sdk(state):
     try:
         text = state.get("cleaned_text")
@@ -172,7 +191,7 @@ def run_fact_verifier_sdk(search_results):
                     "source_link": source,
                 }
 
-            results_list.append(parsed)
+            results_list.append(_complete_verification(parsed, claim, source))
 
         return {
             "claim": claim,
